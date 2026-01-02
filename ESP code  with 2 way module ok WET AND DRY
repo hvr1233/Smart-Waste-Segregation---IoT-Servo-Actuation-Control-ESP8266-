@@ -1,0 +1,130 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+#include <ArduinoJson.h>
+#include <Servo.h>
+const char* ssid = "iot";
+const char* password = "12345678";
+char serverName[] = "http://iotcloud22.in/4421_dustbin/post_value1.php";
+WiFiClient client;
+HTTPClient http;
+Servo myservo;
+int wet;
+int ir;
+int pos = 90;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(D0, INPUT);  //gas
+  pinMode(D2, INPUT);  //tem
+  myservo.attach(D7);  //servo
+  Serial.println(ssid);
+  Serial.println(password);
+  Serial.println(serverName);
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.print(WiFi.localIP());
+}
+
+void loop() {
+  wet = digitalRead(D0);
+  ir = digitalRead(D2);
+  Serial.println(wet);
+  Serial.println(ir);
+  Serial.println("-------------");
+  if (ir == 0 && wet == 0) {
+    Serial.println("ir00");
+    myservo.write(180);
+    delay(1000);
+    myservo.write(90);
+    delay(2000);
+  }
+  if (ir == 0 && wet == 1) {
+    Serial.println("ir01");
+    myservo.write(0);
+    delay(1000);
+    myservo.write(90);
+    delay(2000);
+  } else if (ir == 1 && wet == 1) {
+    delay(500);
+    myservo.write(pos);
+    delay(1500);
+  }
+  sending_to_db();
+  //  json();
+}
+void sending_to_db() {
+  if (WiFi.status() == WL_CONNECTED) {
+    http.begin(client, serverName);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    String httpRequestData = "&value1=" + String(wet) + "";
+    //    Serial.print("httpRequestData: ");
+    //    Serial.println(httpRequestData);
+    int httpResponseCode = http.POST(httpRequestData);
+    if (httpResponseCode > 0) {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+    http.end();
+  }
+}
+void json() {
+  if (WiFi.status() == WL_CONNECTED) {
+    //HTTPClient http;  //Object of class HTTPClient
+    http.begin(client, "http://iotcloud22.in/4421_dustbin/light.json");
+    int httpCode = http.GET();
+    //Check the returning code
+    if (httpCode > 0) {
+      // Parsing
+    }
+  }
+  StaticJsonDocument<256> doc;
+
+  DeserializationError error = deserializeJson(doc, http.getString());
+  Serial.println(http.getString());
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    return;
+  }
+  //StaticJsonDocument<256> doc;
+  //      deserializeJson(doc, json);
+  //     auto error = deserializeJson(doc, json);
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return;
+  }
+
+  String wet = doc["wet"];  // "on"
+  if (wet == "on") {
+    myservo.write(180);
+    delay(15);
+    delay(1000);
+    myservo.write(90);
+    delay(15);
+  }
+  if (wet == "off") {
+    myservo.write(0);
+    delay(15);
+    delay(100);
+    myservo.write(90);
+    delay(15);
+  }
+  if (wet == "off1") {
+    myservo.write(90);
+    delay(15);
+  }
+  http.end();  //Close connection
+  //Serial.println(flag);
+  delay(100);
